@@ -6,10 +6,10 @@ export function DownloadFile(arg1:string):Promise<types.Result>;
 
 export function GetConfig():Promise<types.Result>;
 
-export function GetFileList():Promise<types.Result>;
+export function GetFileList(arg1:string):Promise<types.Result>;
 
 export function Mkdir(arg1:string,arg2:string):Promise<types.Result>;
 
-export function SelectFiles(arg1:string):Promise<types.Result>;
-
 export function UpdateConfig(arg1:types.Config):Promise<types.Result>;
+
+export function UploadFiles(arg1:string):Promise<types.Result>;

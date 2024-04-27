@@ -10,18 +10,18 @@ export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }
 
-export function GetFileList() {
-  return window['go']['main']['App']['GetFileList']();
+export function GetFileList(arg1) {
+  return window['go']['main']['App']['GetFileList'](arg1);
 }
 
 export function Mkdir(arg1, arg2) {
   return window['go']['main']['App']['Mkdir'](arg1, arg2);
 }
 
-export function SelectFiles(arg1) {
-  return window['go']['main']['App']['SelectFiles'](arg1);
-}
-
 export function UpdateConfig(arg1) {
   return window['go']['main']['App']['UpdateConfig'](arg1);
+}
+
+export function UploadFiles(arg1) {
+  return window['go']['main']['App']['UploadFiles'](arg1);
 }

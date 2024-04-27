@@ -1,9 +1,14 @@
 <template>
   <div style="display: flex; justify-content: space-between; align-items: center">
     <el-text size="large">
-      {{ dir }}
+      {{ currentDir }}
     </el-text>
     <div>
+      <el-button type="primary" @click="back">
+        <el-icon>
+          <Back/>
+        </el-icon>
+      </el-button>
       <el-button type="primary" @click="isMkdirDialogShow = true">
         <el-icon>
           <Plus/>
@@ -16,10 +21,10 @@
       </el-button>
     </div>
   </div>
-  <el-table v-loading="isLoading" :data="fileList">
+  <el-table v-loading="isLoading" :data="fileList" @row-dblclick="openDir">
     <el-table-column width="50px">
       <template #default="scope">
-        <el-icon v-if="scope.row.path.endsWith('/')">
+        <el-icon v-if="scope.row.isDir">
           <Folder/>
         </el-icon>
         <el-icon v-else>
@@ -29,7 +34,7 @@
     </el-table-column>
     <el-table-column label="名称">
       <template #default="scope">
-        {{ pathToSimpleName(scope.row.path) }}
+        {{ scope.row.path.substring(scope.row.path.lastIndexOf('/') + 1, scope.row.path.length) }}
       </template>
     </el-table-column>
     <!--    <el-table-column label="大小">-->
@@ -69,12 +74,12 @@
 
 <script lang="ts" setup>
 import {onMounted, ref} from "vue";
-import {DownloadFile, GetFileList, Mkdir, SelectFiles} from "../../wailsjs/go/main/App";
+import {DownloadFile, GetFileList, Mkdir, UploadFiles} from "../../wailsjs/go/main/App";
 import {ElMessage} from "element-plus";
 
 const fileList = ref([])
 const isLoading = ref(false)
-const dir = ref('/')
+const currentDir = ref('/')
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -91,7 +96,7 @@ function formatBytes(bytes: number): string {
 
 async function loadFileList() {
   isLoading.value = true
-  const result = await GetFileList()
+  const result = await GetFileList(currentDir.value)
   isLoading.value = false
   if (result.code != 2000) {
     ElMessage.error(result.msg)
@@ -104,7 +109,7 @@ onMounted(loadFileList)
 
 // TODO 进度展示
 async function uploadFiles() {
-  const result = await SelectFiles(dir.value)
+  const result = await UploadFiles(currentDir.value)
   if (result.code != 2000) {
     ElMessage.error(result.msg)
   }
@@ -129,33 +134,28 @@ const isMkdirDialogShow = ref(false)
 const newDir = ref('')
 
 async function mkdir() {
-  const result = await Mkdir(dir.value, newDir.value)
+  const result = await Mkdir(currentDir.value, newDir.value)
   if (result.code != 2000) {
     ElMessage.error(result.msg)
     return
   }
   ElMessage.success('创建成功')
   isMkdirDialogShow.value = false
+  newDir.value = ''
   await loadFileList()
 }
 
-function pathToSimpleName(filePath: string): string {
-  const lastSlashIndex = filePath.lastIndexOf('/');
-  if (lastSlashIndex === -1) {
-    return filePath; // 如果路径中没有斜杠，则返回整个路径
+const openDir = async (row: any, column: any, event: Event): Promise<void> => {
+  if (row.isDir) {
+    currentDir.value = row.path + '/'
+    await loadFileList()
   }
+}
 
-  // 检查路径是否以斜杠结尾
-  if (filePath.endsWith('/')) {
-    const secondLastSlashIndex = filePath.lastIndexOf('/', lastSlashIndex - 1);
-    if (secondLastSlashIndex === -1) {
-      return filePath; // 如果没有第二个斜杠，则返回整个路径
-    } else {
-      return filePath.substring(secondLastSlashIndex + 1, lastSlashIndex);
-    }
-  } else {
-    return filePath.substring(lastSlashIndex + 1); // 如果路径不以斜杠结尾，则返回最后一个斜杠之后的内容
-  }
+async function back() {
+  const withoutLastSlash = currentDir.value.substring(0, currentDir.value.length - 1)
+  currentDir.value = withoutLastSlash.substring(0, withoutLastSlash.lastIndexOf('/') + 1)
+  await loadFileList()
 }
 </script>
 

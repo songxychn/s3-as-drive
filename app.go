@@ -17,7 +17,6 @@ import (
 	"s3-as-drive/types"
 	"s3-as-drive/utils"
 	"strings"
-	"time"
 )
 
 // App struct
@@ -55,6 +54,7 @@ func initDB() {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		path VARCHAR NOT NULL UNIQUE,
 		key VARCHAR,
+		is_dir boolean NOT NULL DEFAULT false,
 		create_time DATETIME DEFAULT CURRENT_TIMESTAMP);
     `
 	_, err = db.Exec(createTableSQL)
@@ -145,22 +145,19 @@ func (a *App) UpdateConfig(config types.Config) types.Result {
 	return types.SuccessEmpty()
 }
 
-type File struct {
-	ID         string         `json:"id"`
-	Path       string         `json:"path"`
-	Key        sql.NullString `json:"key"`
-	CreateTime time.Time      `json:"createTime"`
-}
-
-func (a *App) GetFileList() types.Result {
-	rows, err := db.Query("select id, path, key, create_time from file;")
+func (a *App) GetFileList(currentDir string) types.Result {
+	slashCount := strings.Count(currentDir, "/")
+	rows, err := db.Query(`select id, path, key, create_time, is_dir from file 
+		where path like concat(?, '%') 
+		and (length(path) - length(replace(path,'/',''))) = ?`,
+		currentDir, slashCount)
 	if err != nil {
 		return types.Error(err.Error())
 	}
-	var files []File
+	var files []types.File
 	for rows.Next() {
-		var file File
-		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime)
+		var file types.File
+		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime, &file.IsDir)
 		if err != nil {
 			return types.Error(err.Error())
 		}
@@ -169,7 +166,7 @@ func (a *App) GetFileList() types.Result {
 	return types.Success(files)
 }
 
-func (a *App) SelectFiles(dir string) types.Result {
+func (a *App) UploadFiles(currentDir string) types.Result {
 	config, err := utils.GetConfig()
 	if err != nil {
 		return types.Error(err.Error())
@@ -180,10 +177,9 @@ func (a *App) SelectFiles(dir string) types.Result {
 		return types.Error(err.Error())
 	}
 
-	insertSQL := `
-		   INSERT INTO file (path, key) VALUES (?, ?);
-		`
+	insertSQL := "INSERT INTO file (path, key) VALUES (?, ?);"
 	for _, filePathItem := range files {
+		// TODO 上传目录怎么处理?
 
 		// 上传 s3
 		newUUID, err := uuid.NewUUID()
@@ -197,8 +193,7 @@ func (a *App) SelectFiles(dir string) types.Result {
 		}
 
 		// 插入数据库
-		index := strings.LastIndex(filePathItem, "/")
-		path := filepath.Join(dir, filePathItem[index+1:])
+		path := filepath.Join(currentDir, filepath.Base(filePathItem))
 		_, err = db.Exec(insertSQL, path, key)
 		if err != nil {
 			return types.Error(err.Error())
@@ -212,21 +207,49 @@ func (a *App) DownloadFile(fileId string) types.Result {
 	if err != nil {
 		return types.Error(err.Error())
 	}
-	var file File
-	err = db.QueryRow("select id, path, key, create_time from file where id = ?", fileId).Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime)
+	var file types.File
+	err = db.QueryRow("select id, path, key, create_time, is_dir from file where id = ?", fileId).Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime, &file.IsDir)
 	if err != nil {
 		return types.Error(err.Error())
 	}
-	downloadPath := filepath.Join(config.DownloadConfig.Dir, filepath.Base(file.Path))
-	err = s3Client.FGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, downloadPath, minio.GetObjectOptions{})
+
+	if !file.IsDir {
+		// 是单个文件
+		downloadPath := filepath.Join(config.DownloadConfig.Dir, filepath.Base(file.Path))
+		err = s3Client.FGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, downloadPath, minio.GetObjectOptions{})
+		if err != nil {
+			return types.Error(err.Error())
+		}
+		return types.SuccessEmpty()
+	}
+
+	// 是目录
+	rows, err := db.Query("select id, path, key, create_time, is_dir from file where path like concat(?, '%')", file.Path)
 	if err != nil {
 		return types.Error(err.Error())
+	}
+	for rows.Next() {
+		var file types.File
+		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime, &file.IsDir)
+		if err != nil {
+			return types.Error(err.Error())
+		}
+		fmt.Println(file)
+
+		if file.IsDir {
+			continue
+		}
+		downloadPath := filepath.Join(config.DownloadConfig.Dir, file.Path)
+		err := s3Client.FGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, downloadPath, minio.GetObjectOptions{})
+		if err != nil {
+			return types.Error(err.Error())
+		}
 	}
 	return types.SuccessEmpty()
 }
 
 func (a *App) Mkdir(parentDir string, newDir string) types.Result {
-	_, err := db.Exec("insert into file(path) values (?)", fmt.Sprintf("%s%s/", parentDir, newDir))
+	_, err := db.Exec("insert into file(path, is_dir) values (?, true)", fmt.Sprintf("%s%s", parentDir, newDir))
 	if err != nil {
 		return types.Error(err.Error())
 	}
