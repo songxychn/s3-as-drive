@@ -179,8 +179,6 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 
 	insertSQL := "INSERT INTO file (path, key) VALUES (?, ?);"
 	for _, filePathItem := range files {
-		// TODO 上传目录怎么处理?
-
 		// 上传 s3
 		newUUID, err := uuid.NewUUID()
 		if err != nil {
