@@ -3,16 +3,33 @@
     <el-text size="large">
       {{ dir }}
     </el-text>
-    <el-button type="primary" @click="uploadFiles">
-      <el-icon>
-        <Upload/>
-      </el-icon>
-    </el-button>
+    <div>
+      <el-button type="primary" @click="isMkdirDialogShow = true">
+        <el-icon>
+          <Plus/>
+        </el-icon>
+      </el-button>
+      <el-button type="primary" @click="uploadFiles">
+        <el-icon>
+          <Upload/>
+        </el-icon>
+      </el-button>
+    </div>
   </div>
   <el-table v-loading="isLoading" :data="fileList">
+    <el-table-column width="50px">
+      <template #default="scope">
+        <el-icon v-if="scope.row.path.endsWith('/')">
+          <Folder/>
+        </el-icon>
+        <el-icon v-else>
+          <Document/>
+        </el-icon>
+      </template>
+    </el-table-column>
     <el-table-column label="名称">
       <template #default="scope">
-        {{ scope.row.path.substring(scope.row.path.lastIndexOf('/') + 1) }}
+        {{ pathToSimpleName(scope.row.path) }}
       </template>
     </el-table-column>
     <!--    <el-table-column label="大小">-->
@@ -30,11 +47,29 @@
       </template>
     </el-table-column>
   </el-table>
+
+  <el-dialog v-model="isMkdirDialogShow">
+    <template #header>
+      创建新目录
+    </template>
+
+    <el-form-item label="新目录名">
+      <el-input v-model="newDir">
+
+      </el-input>
+    </el-form-item>
+
+    <template #footer>
+      <el-button type="primary" @click="mkdir">
+        创建
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script lang="ts" setup>
 import {onMounted, ref} from "vue";
-import {DownloadFile, GetFileList, SelectFiles} from "../../wailsjs/go/main/App";
+import {DownloadFile, GetFileList, Mkdir, SelectFiles} from "../../wailsjs/go/main/App";
 import {ElMessage} from "element-plus";
 
 const fileList = ref([])
@@ -88,6 +123,39 @@ async function download(id: number) {
     return
   }
   ElMessage.success('下载成功')
+}
+
+const isMkdirDialogShow = ref(false)
+const newDir = ref('')
+
+async function mkdir() {
+  const result = await Mkdir(dir.value, newDir.value)
+  if (result.code != 2000) {
+    ElMessage.error(result.msg)
+    return
+  }
+  ElMessage.success('创建成功')
+  isMkdirDialogShow.value = false
+  await loadFileList()
+}
+
+function pathToSimpleName(filePath: string): string {
+  const lastSlashIndex = filePath.lastIndexOf('/');
+  if (lastSlashIndex === -1) {
+    return filePath; // 如果路径中没有斜杠，则返回整个路径
+  }
+
+  // 检查路径是否以斜杠结尾
+  if (filePath.endsWith('/')) {
+    const secondLastSlashIndex = filePath.lastIndexOf('/', lastSlashIndex - 1);
+    if (secondLastSlashIndex === -1) {
+      return filePath; // 如果没有第二个斜杠，则返回整个路径
+    } else {
+      return filePath.substring(secondLastSlashIndex + 1, lastSlashIndex);
+    }
+  } else {
+    return filePath.substring(lastSlashIndex + 1); // 如果路径不以斜杠结尾，则返回最后一个斜杠之后的内容
+  }
 }
 </script>
 

@@ -54,8 +54,7 @@ func initDB() {
 		CREATE TABLE IF NOT EXISTS file (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		path VARCHAR NOT NULL UNIQUE,
-		key VARCHAR NOT NULL,
-		is_dir boolean NOT NULL,
+		key VARCHAR,
 		create_time DATETIME DEFAULT CURRENT_TIMESTAMP);
     `
 	_, err = db.Exec(createTableSQL)
@@ -92,25 +91,28 @@ func initConfig() {
 		panic(err)
 	}
 
-	// 创建配置文件
 	configFilePath := filepath.Join(baseDirPath, "config.json")
-	config := types.Config{
-		S3Config: types.S3Config{
-			Endpoint:  "play.min.io",
-			AccessKey: "Q3AM3UQ867SPQQA43P2F",
-			SecretKey: "zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG",
-		},
-		DownloadConfig: types.DownloadConfig{
-			Dir: filepath.Join(homeDir, "Downloads"),
-		},
-	}
-	bytes, err := json.Marshal(config)
-	if err != nil {
-		panic(err)
-	}
-	err = os.WriteFile(configFilePath, bytes, 0644)
-	if err != nil {
-		return
+	_, err = os.Stat(configFilePath)
+	if os.IsNotExist(err) {
+		// 配置文件不存在, 需要创建
+		config := types.Config{
+			S3Config: types.S3Config{
+				Endpoint:  "play.min.io",
+				AccessKey: "Q3AM3UQ867SPQQA43P2F",
+				SecretKey: "zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG",
+			},
+			DownloadConfig: types.DownloadConfig{
+				Dir: filepath.Join(homeDir, "Downloads"),
+			},
+		}
+		bytes, err := json.Marshal(config)
+		if err != nil {
+			panic(err)
+		}
+		err = os.WriteFile(configFilePath, bytes, 0644)
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -144,22 +146,21 @@ func (a *App) UpdateConfig(config types.Config) types.Result {
 }
 
 type File struct {
-	ID         string    `json:"id"`
-	Path       string    `json:"path"`
-	Key        string    `json:"key"`
-	IsDir      bool      `json:"isDir"`
-	CreateTime time.Time `json:"createTime"`
+	ID         string         `json:"id"`
+	Path       string         `json:"path"`
+	Key        sql.NullString `json:"key"`
+	CreateTime time.Time      `json:"createTime"`
 }
 
 func (a *App) GetFileList() types.Result {
-	rows, err := db.Query("select id, path, key, is_dir, create_time from file;")
+	rows, err := db.Query("select id, path, key, create_time from file;")
 	if err != nil {
 		return types.Error(err.Error())
 	}
 	var files []File
 	for rows.Next() {
 		var file File
-		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.IsDir, &file.CreateTime)
+		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime)
 		if err != nil {
 			return types.Error(err.Error())
 		}
@@ -180,7 +181,7 @@ func (a *App) SelectFiles(dir string) types.Result {
 	}
 
 	insertSQL := `
-		   INSERT INTO file (path, key, is_dir) VALUES (?, ?, false);
+		   INSERT INTO file (path, key) VALUES (?, ?);
 		`
 	for _, filePathItem := range files {
 
@@ -212,12 +213,20 @@ func (a *App) DownloadFile(fileId string) types.Result {
 		return types.Error(err.Error())
 	}
 	var file File
-	err = db.QueryRow("select id, path, key, is_dir, create_time from file where id = ?", fileId).Scan(&file.ID, &file.Path, &file.Key, &file.IsDir, &file.CreateTime)
+	err = db.QueryRow("select id, path, key, create_time from file where id = ?", fileId).Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime)
 	if err != nil {
 		return types.Error(err.Error())
 	}
 	downloadPath := filepath.Join(config.DownloadConfig.Dir, filepath.Base(file.Path))
-	err = s3Client.FGetObject(context.Background(), config.S3Config.Bucket, file.Key, downloadPath, minio.GetObjectOptions{})
+	err = s3Client.FGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, downloadPath, minio.GetObjectOptions{})
+	if err != nil {
+		return types.Error(err.Error())
+	}
+	return types.SuccessEmpty()
+}
+
+func (a *App) Mkdir(parentDir string, newDir string) types.Result {
+	_, err := db.Exec("insert into file(path) values (?)", fmt.Sprintf("%s%s/", parentDir, newDir))
 	if err != nil {
 		return types.Error(err.Error())
 	}

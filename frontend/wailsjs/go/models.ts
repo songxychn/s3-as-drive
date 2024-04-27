@@ -3,13 +3,13 @@ export namespace types {
 	export class DownloadConfig {
 	    dir: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new DownloadConfig(source);
+	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.dir = source["dir"];
-	    }
-	
-	    static createFrom(source: any = {}) {
-	        return new DownloadConfig(source);
 	    }
 	}
 	export class S3Config {
@@ -18,6 +18,10 @@ export namespace types {
 	    secretKey: string;
 	    bucket: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new S3Config(source);
+	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.endpoint = source["endpoint"];
@@ -25,23 +29,19 @@ export namespace types {
 	        this.secretKey = source["secretKey"];
 	        this.bucket = source["bucket"];
 	    }
-	
-	    static createFrom(source: any = {}) {
-	        return new S3Config(source);
-	    }
 	}
 	export class Config {
 	    s3Config: S3Config;
 	    downloadConfig: DownloadConfig;
 	
+	    static createFrom(source: any = {}) {
+	        return new Config(source);
+	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.s3Config = this.convertValues(source["s3Config"], S3Config);
 	        this.downloadConfig = this.convertValues(source["downloadConfig"], DownloadConfig);
-	    }
-	
-	    static createFrom(source: any = {}) {
-	        return new Config(source);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -68,15 +68,15 @@ export namespace types {
 	    msg: string;
 	    data: any;
 	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.code = source["code"];
 	        this.msg = source["msg"];
 	        this.data = source["data"];
-	    }
-	
-	    static createFrom(source: any = {}) {
-	        return new Result(source);
 	    }
 	}
 

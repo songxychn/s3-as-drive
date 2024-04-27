@@ -14,6 +14,10 @@ export function GetFileList() {
   return window['go']['main']['App']['GetFileList']();
 }
 
+export function Mkdir(arg1, arg2) {
+  return window['go']['main']['App']['Mkdir'](arg1, arg2);
+}
+
 export function SelectFiles(arg1) {
   return window['go']['main']['App']['SelectFiles'](arg1);
 }
