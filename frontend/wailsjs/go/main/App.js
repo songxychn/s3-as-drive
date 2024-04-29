@@ -30,6 +30,10 @@ export function UpdateConfig(arg1) {
   return window['go']['main']['App']['UpdateConfig'](arg1);
 }
 
+export function UploadDir(arg1) {
+  return window['go']['main']['App']['UploadDir'](arg1);
+}
+
 export function UploadFiles(arg1) {
   return window['go']['main']['App']['UploadFiles'](arg1);
 }

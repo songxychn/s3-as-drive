@@ -16,4 +16,6 @@ export function Mkdir(arg1:string,arg2:string):Promise<types.Result>;
 
 export function UpdateConfig(arg1:types.Config):Promise<types.Result>;
 
+export function UploadDir(arg1:string):Promise<types.Result>;
+
 export function UploadFiles(arg1:string):Promise<types.Result>;

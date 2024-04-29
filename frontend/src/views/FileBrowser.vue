@@ -4,7 +4,7 @@
       {{ currentDir }}
     </el-text>
     <div>
-      <el-button type="primary" @click="back">
+      <el-button :disabled="currentDir === '/'" type="primary" @click="back">
         <el-icon>
           <Back/>
         </el-icon>
@@ -54,7 +54,7 @@
           </el-icon>
         </el-button>
 
-        <el-button type="primary" @click="fileIdToShare = scope.row.id; isShareDialogShow = true">
+        <el-button :disabled="scope.row.isDir" type="primary" @click="fileIdToShare = scope.row.id; isShareDialogShow = true">
           <el-icon>
             <Share/>
           </el-icon>
@@ -128,7 +128,15 @@
 
 <script lang="ts" setup>
 import {onMounted, ref} from "vue";
-import {DeleteFile, DownloadFile, GetFileList, GetShareUrl, Mkdir, UploadFiles} from "../../wailsjs/go/main/App";
+import {
+  DeleteFile,
+  DownloadFile,
+  GetFileList,
+  GetShareUrl,
+  Mkdir,
+  UploadDir,
+  UploadFiles
+} from "../../wailsjs/go/main/App";
 import {ElMessage} from "element-plus";
 import dayjs from "dayjs";
 
@@ -218,7 +226,15 @@ async function back() {
 }
 
 async function uploadDir() {
-  // TODO 上传目录
+  const result = await UploadDir(currentDir.value)
+  if (result.code != 2000) {
+    ElMessage.error(result.msg)
+    return
+  }
+  if (result.data !== '') {
+    ElMessage.success('上传成功')
+    await loadFileList()
+  }
 }
 
 const isShareDialogShow = ref(false)

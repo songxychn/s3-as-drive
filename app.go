@@ -10,6 +10,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"io/fs"
 	"log"
 	"net/url"
 	"os"
@@ -57,7 +58,7 @@ func initDB() {
 		  "path" VARCHAR NOT NULL,
 		  "key" VARCHAR,
 		  "create_time" DATETIME DEFAULT CURRENT_TIMESTAMP,
-		  "is_dir" boolean NOT NULL DEFAULT false,
+		  "is_dir" boolean NOT NULL,
 		  "depth" integer NOT NULL,
 		  "size" integer,
 		  UNIQUE ("path" ASC)
@@ -188,7 +189,7 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 	}
 
 	depth := strings.Count(currentDir, "/")
-	insertSQL := "INSERT INTO file (path, key, depth, size) VALUES (?, ?, ?, ?);"
+	insertSQL := "INSERT INTO file (path, key, is_dir, depth, size) VALUES (?, ?, false, ?, ?);"
 	for _, filePath := range files {
 		// 上传 s3
 		newUUID, err := uuid.NewUUID()
@@ -213,6 +214,65 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 		}
 	}
 	return types.Success(len(files))
+}
+
+func (a *App) UploadDir(currentDir string) types.Result {
+	config, err := utils.GetConfig()
+	if err != nil {
+		log.Fatalln(err)
+		return types.ErrorEmpty()
+	}
+	dirPath, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{})
+	if err != nil {
+		log.Fatalln(err)
+		return types.ErrorEmpty()
+	}
+	if dirPath == "" {
+		// 用户取消了
+		return types.Success("")
+	}
+
+	base := filepath.Base(dirPath)
+
+	err = filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+		newPath := fmt.Sprintf("%s%s", currentDir, path[strings.Index(path, base):])
+		depth := strings.Count(newPath, "/")
+		if d.IsDir() {
+			_, err = db.Exec("insert into file(path, is_dir, depth) values (?, true, ?)", newPath, depth)
+			if err != nil {
+				return err
+			}
+		} else {
+			if filepath.Base(path) == ".DS_Store" {
+				// macos 可忽略的文件
+				return nil
+			}
+			fileInfo, err := os.Stat(path)
+			if err != nil {
+				return err
+			}
+			newUUID, err := uuid.NewUUID()
+			if err != nil {
+				return err
+			}
+			key := fmt.Sprintf("%s%s", newUUID, filepath.Ext(path))
+			_, err = db.Exec("insert into file(path, key, is_dir, depth, size) values (?, ?, false, ?, ?)", newPath, key, depth, fileInfo.Size())
+			if err != nil {
+				return err
+			}
+
+			_, err = s3Client.FPutObject(context.Background(), config.S3Config.Bucket, key, path, minio.PutObjectOptions{})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatalln(err)
+		return types.ErrorEmpty()
+	}
+	return types.Success(dirPath)
 }
 
 func (a *App) DownloadFile(fileId string) types.Result {
