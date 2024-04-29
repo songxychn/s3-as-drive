@@ -33,7 +33,7 @@
     </el-table-column>
     <el-table-column label="名称">
       <template #default="scope">
-        {{ scope.row.path.substring(scope.row.path.lastIndexOf('/') + 1, scope.row.path.length) }}
+        {{ getBaseName(scope.row.path) }}
       </template>
     </el-table-column>
     <el-table-column label="大小">
@@ -59,6 +59,12 @@
             <Share/>
           </el-icon>
         </el-button>
+
+        <el-button type="danger" @click="fileToDelete = scope.row; isDeleteDialogShow = true">
+          <el-icon>
+            <Delete/>
+          </el-icon>
+        </el-button>
       </template>
     </el-table-column>
   </el-table>
@@ -77,6 +83,27 @@
     <template #footer>
       <el-button type="primary" @click="mkdir">
         创建
+      </el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="isDeleteDialogShow">
+    <template #header>
+      确认删除？
+    </template>
+    <div v-if="fileToDelete.isDir">
+      确认要删除{{ getBaseName(fileToDelete.path) }}及其子文件吗？
+    </div>
+    <div v-else>
+      确认要删除{{ getBaseName(fileToDelete.path) }}吗？
+    </div>
+
+    <template #footer>
+      <el-button type="primary" @click="isDeleteDialogShow = false">
+        取消
+      </el-button>
+      <el-button type="danger" @click="deleteFile">
+        删除
       </el-button>
     </template>
   </el-dialog>
@@ -101,7 +128,7 @@
 
 <script lang="ts" setup>
 import {onMounted, ref} from "vue";
-import {DownloadFile, GetFileList, GetShareUrl, Mkdir, UploadFiles} from "../../wailsjs/go/main/App";
+import {DeleteFile, DownloadFile, GetFileList, GetShareUrl, Mkdir, UploadFiles} from "../../wailsjs/go/main/App";
 import {ElMessage} from "element-plus";
 import dayjs from "dayjs";
 
@@ -206,6 +233,24 @@ async function share() {
   }
   ElMessage.success('分享链接已复制')
   isShareDialogShow.value = false
+}
+
+const isDeleteDialogShow = ref(false)
+const fileToDelete: any = ref({})
+
+async function deleteFile() {
+  const result = await DeleteFile(String(fileToDelete.value.id))
+  if (result.code != 2000) {
+    ElMessage.error(result.msg)
+    return
+  }
+  ElMessage.success('删除成功')
+  isDeleteDialogShow.value = false
+  await loadFileList()
+}
+
+function getBaseName(path: string): string {
+  return path.substring(path.lastIndexOf('/') + 1)
 }
 </script>
 

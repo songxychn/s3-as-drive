@@ -24,3 +24,10 @@ func SuccessEmpty() Result {
 func Error(msg string) Result {
 	return Result{Code: ERROR, Msg: msg}
 }
+
+func ErrorEmpty() Result {
+	return Result{
+		Code: ERROR,
+		Msg:  "失败",
+	}
+}

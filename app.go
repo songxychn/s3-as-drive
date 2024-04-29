@@ -237,7 +237,7 @@ func (a *App) DownloadFile(fileId string) types.Result {
 	}
 
 	// 是目录
-	rows, err := db.Query("select id, path, key, is_dir from file where path like concat(?, '%')", file.Path)
+	rows, err := db.Query("select id, path, key, is_dir from file where path like concat(?, '/%')", file.Path)
 	if err != nil {
 		return types.Error(err.Error())
 	}
@@ -294,6 +294,79 @@ func (a *App) GetShareUrl(fileId string, expireInSecond int) types.Result {
 	err = runtime.ClipboardSetText(a.ctx, presignedURL.String())
 	if err != nil {
 		return types.Error(err.Error())
+	}
+	return types.SuccessEmpty()
+}
+
+func (a *App) DeleteFile(fileId string) types.Result {
+	config, err := utils.GetConfig()
+	if err != nil {
+		log.Fatalln(err)
+		return types.ErrorEmpty()
+	}
+
+	var file types.File
+	row := db.QueryRow("select id, path, key, is_dir, depth from file where id = ?", fileId)
+	err = row.Scan(&file.ID, &file.Path, &file.Key, &file.IsDir, &file.Depth)
+	if err != nil {
+		log.Fatalln(err)
+		return types.ErrorEmpty()
+	}
+
+	if !file.IsDir {
+		// 单个文件
+		_, err = db.Exec("delete from file where id = ?", fileId)
+		if err != nil {
+			log.Fatalln(err)
+			return types.ErrorEmpty()
+		}
+
+		err = s3Client.RemoveObject(context.Background(), config.S3Config.Bucket, *file.Key, minio.RemoveObjectOptions{})
+		if err != nil {
+			log.Fatalln(err)
+			return types.ErrorEmpty()
+		}
+
+		return types.SuccessEmpty()
+	}
+
+	// 目录
+	// 获取所有子文件
+	rows, err := db.Query("select id, path, key, is_dir from file where path like concat(?, '/%')", file.Path)
+	if err != nil {
+		log.Fatalln(err)
+		return types.ErrorEmpty()
+	}
+
+	// 删除数据库中的子文件和本目录
+	_, err = db.Exec("delete from file where path like concat(?, '/%') or id = ?", file.Path, fileId)
+	if err != nil {
+		log.Fatalln(err)
+		return types.ErrorEmpty()
+	}
+
+	// 删除 s3 中的子文件
+	objectsCh := make(chan minio.ObjectInfo)
+	go func() {
+		defer close(objectsCh)
+
+		for rows.Next() {
+			var file types.File
+			err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.IsDir)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			if !file.IsDir {
+				objectsCh <- minio.ObjectInfo{
+					Key: *file.Key,
+				}
+			}
+		}
+	}()
+
+	for deleteErr := range s3Client.RemoveObjects(context.Background(), config.S3Config.Bucket, objectsCh, minio.RemoveObjectsOptions{}) {
+		log.Println(deleteErr)
 	}
 	return types.SuccessEmpty()
 }
