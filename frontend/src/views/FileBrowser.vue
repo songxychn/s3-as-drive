@@ -36,14 +36,14 @@
         {{ scope.row.path.substring(scope.row.path.lastIndexOf('/') + 1, scope.row.path.length) }}
       </template>
     </el-table-column>
-    <!--    <el-table-column label="大小">-->
-    <!--      <template #default="scope">-->
-    <!--        {{ formatBytes(scope.row.size)}}-->
-    <!--      </template>-->
-    <!--    </el-table-column>-->
+    <el-table-column label="大小">
+      <template #default="scope">
+        {{ formatBytes(scope.row.size) }}
+      </template>
+    </el-table-column>
     <el-table-column label="创建时间">
       <template #default="scope">
-        {{ dayjs(scope.row.createTime).format('YYYY-MM-DD HH:mm:ss')}}
+        {{ dayjs(scope.row.createTime).format('YYYY-MM-DD HH:mm:ss') }}
       </template>
     </el-table-column>
     <el-table-column label="操作">
@@ -110,15 +110,19 @@ const isLoading = ref(false)
 const currentDir = ref('/')
 
 function formatBytes(bytes: number): string {
+  if (!bytes) {
+    return '-'
+  }
   if (bytes < 1024) {
     return bytes + " Bytes";
-  } else if (bytes < 1024 * 1024) {
-    return (bytes / 1024).toFixed(2) + " KB";
-  } else if (bytes < 1024 * 1024 * 1024) {
-    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
-  } else {
-    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
   }
+  if (bytes < 1024 * 1024) {
+    return (bytes / 1024).toFixed(2) + " KB";
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
 }
 
 

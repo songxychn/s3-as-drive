@@ -59,6 +59,7 @@ func initDB() {
 		  "create_time" DATETIME DEFAULT CURRENT_TIMESTAMP,
 		  "is_dir" boolean NOT NULL DEFAULT false,
 		  "depth" integer NOT NULL,
+		  "size" integer,
 		  UNIQUE ("path" ASC)
 		);
 		
@@ -157,7 +158,7 @@ func (a *App) UpdateConfig(config types.Config) types.Result {
 
 func (a *App) GetFileList(currentDir string) types.Result {
 	depth := strings.Count(currentDir, "/")
-	rows, err := db.Query(`select id, path, key, create_time, is_dir from file 
+	rows, err := db.Query(`select id, path, key, create_time, is_dir, size from file 
 		where path like concat(?, '%') and depth = ?`,
 		currentDir, depth)
 	if err != nil {
@@ -166,7 +167,7 @@ func (a *App) GetFileList(currentDir string) types.Result {
 	var files []types.File
 	for rows.Next() {
 		var file types.File
-		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime, &file.IsDir)
+		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime, &file.IsDir, &file.Size)
 		if err != nil {
 			return types.Error(err.Error())
 		}
@@ -187,22 +188,26 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 	}
 
 	depth := strings.Count(currentDir, "/")
-	insertSQL := "INSERT INTO file (path, key, depth) VALUES (?, ?, ?);"
-	for _, filePathItem := range files {
+	insertSQL := "INSERT INTO file (path, key, depth, size) VALUES (?, ?, ?, ?);"
+	for _, filePath := range files {
 		// 上传 s3
 		newUUID, err := uuid.NewUUID()
 		if err != nil {
 			return types.Error(err.Error())
 		}
-		key := fmt.Sprintf("%s%s", newUUID, filepath.Ext(filePathItem))
-		_, err = s3Client.FPutObject(context.Background(), config.S3Config.Bucket, key, filePathItem, minio.PutObjectOptions{})
+		key := fmt.Sprintf("%s%s", newUUID, filepath.Ext(filePath))
+		_, err = s3Client.FPutObject(context.Background(), config.S3Config.Bucket, key, filePath, minio.PutObjectOptions{})
 		if err != nil {
 			return types.Error(err.Error())
 		}
 
 		// 插入数据库
-		path := filepath.Join(currentDir, filepath.Base(filePathItem))
-		_, err = db.Exec(insertSQL, path, key, depth)
+		path := filepath.Join(currentDir, filepath.Base(filePath))
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			return types.Error(err.Error())
+		}
+		_, err = db.Exec(insertSQL, path, key, depth, fileInfo.Size())
 		if err != nil {
 			return types.Error(err.Error())
 		}
@@ -224,7 +229,7 @@ func (a *App) DownloadFile(fileId string) types.Result {
 	if !file.IsDir {
 		// 是单个文件
 		downloadPath := filepath.Join(config.DownloadConfig.Dir, filepath.Base(file.Path))
-		err = s3Client.FGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, downloadPath, minio.GetObjectOptions{})
+		err = s3Client.FGetObject(context.Background(), config.S3Config.Bucket, *file.Key, downloadPath, minio.GetObjectOptions{})
 		if err != nil {
 			return types.Error(err.Error())
 		}
@@ -247,7 +252,7 @@ func (a *App) DownloadFile(fileId string) types.Result {
 			continue
 		}
 		downloadPath := filepath.Join(config.DownloadConfig.Dir, file.Path)
-		err := s3Client.FGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, downloadPath, minio.GetObjectOptions{})
+		err := s3Client.FGetObject(context.Background(), config.S3Config.Bucket, *file.Key, downloadPath, minio.GetObjectOptions{})
 		if err != nil {
 			return types.Error(err.Error())
 		}
@@ -280,7 +285,7 @@ func (a *App) GetShareUrl(fileId string, expireInSecond int) types.Result {
 	fileName := filepath.Base(file.Path)
 	reqParams := make(url.Values)
 	reqParams.Set("response-content-disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
-	presignedURL, err := s3Client.PresignedGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, time.Second*time.Duration(expireInSecond), reqParams)
+	presignedURL, err := s3Client.PresignedGetObject(context.Background(), config.S3Config.Bucket, *file.Key, time.Second*time.Duration(expireInSecond), reqParams)
 	if err != nil {
 		return types.Error(err.Error())
 	}
