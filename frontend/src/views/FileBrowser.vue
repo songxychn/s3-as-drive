@@ -10,14 +10,13 @@
         </el-icon>
       </el-button>
       <el-button type="primary" @click="isMkdirDialogShow = true">
-        <el-icon>
-          <Plus/>
-        </el-icon>
+        新建目录
       </el-button>
       <el-button type="primary" @click="uploadFiles">
-        <el-icon>
-          <Upload/>
-        </el-icon>
+        上传文件
+      </el-button>
+      <el-button type="primary" @click="uploadDir">
+        上传目录
       </el-button>
     </div>
   </div>
@@ -49,6 +48,10 @@
             <Download/>
           </el-icon>
         </el-button>
+
+        <el-button type="primary" @click="share(scope.row.id)">
+          <el-icon><Share /></el-icon>
+        </el-button>
       </template>
     </el-table-column>
   </el-table>
@@ -74,7 +77,7 @@
 
 <script lang="ts" setup>
 import {onMounted, ref} from "vue";
-import {DownloadFile, GetFileList, Mkdir, UploadFiles} from "../../wailsjs/go/main/App";
+import {DownloadFile, GetFileList, GetShareUrl, Mkdir, UploadFiles} from "../../wailsjs/go/main/App";
 import {ElMessage} from "element-plus";
 
 const fileList = ref([])
@@ -156,6 +159,19 @@ async function back() {
   const withoutLastSlash = currentDir.value.substring(0, currentDir.value.length - 1)
   currentDir.value = withoutLastSlash.substring(0, withoutLastSlash.lastIndexOf('/') + 1)
   await loadFileList()
+}
+
+async function uploadDir() {
+  // TODO 上传目录
+}
+
+async function share(fileId: number) {
+  const result = await GetShareUrl(String(fileId), 60 * 60 * 24 * 7)
+  if (result.code != 2000) {
+    ElMessage.error(result.msg)
+    return
+  }
+  ElMessage.success('分享链接已复制')
 }
 </script>
 

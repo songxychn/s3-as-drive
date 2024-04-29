@@ -14,6 +14,10 @@ export function GetFileList(arg1) {
   return window['go']['main']['App']['GetFileList'](arg1);
 }
 
+export function GetShareUrl(arg1, arg2) {
+  return window['go']['main']['App']['GetShareUrl'](arg1, arg2);
+}
+
 export function Mkdir(arg1, arg2) {
   return window['go']['main']['App']['Mkdir'](arg1, arg2);
 }

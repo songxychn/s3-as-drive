@@ -8,6 +8,8 @@ export function GetConfig():Promise<types.Result>;
 
 export function GetFileList(arg1:string):Promise<types.Result>;
 
+export function GetShareUrl(arg1:string,arg2:number):Promise<types.Result>;
+
 export function Mkdir(arg1:string,arg2:string):Promise<types.Result>;
 
 export function UpdateConfig(arg1:types.Config):Promise<types.Result>;

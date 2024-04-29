@@ -11,12 +11,14 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"log"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
 	"s3-as-drive/types"
 	"s3-as-drive/utils"
 	"strings"
+	"time"
 )
 
 // App struct
@@ -50,12 +52,20 @@ func initDB() {
 		panic(err)
 	}
 	createTableSQL := `
-		CREATE TABLE IF NOT EXISTS file (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		path VARCHAR NOT NULL UNIQUE,
-		key VARCHAR,
-		is_dir boolean NOT NULL DEFAULT false,
-		create_time DATETIME DEFAULT CURRENT_TIMESTAMP);
+		CREATE TABLE IF NOT EXISTS "file" (
+		  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+		  "path" VARCHAR NOT NULL,
+		  "key" VARCHAR,
+		  "create_time" DATETIME DEFAULT CURRENT_TIMESTAMP,
+		  "is_dir" boolean NOT NULL DEFAULT false,
+		  "depth" integer NOT NULL,
+		  UNIQUE ("path" ASC)
+		);
+		
+		CREATE INDEX IF NOT EXISTS "idx_depth"
+		ON "file" (
+		  "depth" ASC
+		);
     `
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
@@ -146,11 +156,10 @@ func (a *App) UpdateConfig(config types.Config) types.Result {
 }
 
 func (a *App) GetFileList(currentDir string) types.Result {
-	slashCount := strings.Count(currentDir, "/")
+	depth := strings.Count(currentDir, "/")
 	rows, err := db.Query(`select id, path, key, create_time, is_dir from file 
-		where path like concat(?, '%') 
-		and (length(path) - length(replace(path,'/',''))) = ?`,
-		currentDir, slashCount)
+		where path like concat(?, '%') and depth = ?`,
+		currentDir, depth)
 	if err != nil {
 		return types.Error(err.Error())
 	}
@@ -177,7 +186,8 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 		return types.Error(err.Error())
 	}
 
-	insertSQL := "INSERT INTO file (path, key) VALUES (?, ?);"
+	depth := strings.Count(currentDir, "/")
+	insertSQL := "INSERT INTO file (path, key, depth) VALUES (?, ?, ?);"
 	for _, filePathItem := range files {
 		// 上传 s3
 		newUUID, err := uuid.NewUUID()
@@ -192,7 +202,7 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 
 		// 插入数据库
 		path := filepath.Join(currentDir, filepath.Base(filePathItem))
-		_, err = db.Exec(insertSQL, path, key)
+		_, err = db.Exec(insertSQL, path, key, depth)
 		if err != nil {
 			return types.Error(err.Error())
 		}
@@ -206,7 +216,7 @@ func (a *App) DownloadFile(fileId string) types.Result {
 		return types.Error(err.Error())
 	}
 	var file types.File
-	err = db.QueryRow("select id, path, key, create_time, is_dir from file where id = ?", fileId).Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime, &file.IsDir)
+	err = db.QueryRow("select id, path, key, is_dir from file where id = ?", fileId).Scan(&file.ID, &file.Path, &file.Key, &file.IsDir)
 	if err != nil {
 		return types.Error(err.Error())
 	}
@@ -222,17 +232,16 @@ func (a *App) DownloadFile(fileId string) types.Result {
 	}
 
 	// 是目录
-	rows, err := db.Query("select id, path, key, create_time, is_dir from file where path like concat(?, '%')", file.Path)
+	rows, err := db.Query("select id, path, key, is_dir from file where path like concat(?, '%')", file.Path)
 	if err != nil {
 		return types.Error(err.Error())
 	}
 	for rows.Next() {
 		var file types.File
-		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.CreateTime, &file.IsDir)
+		err = rows.Scan(&file.ID, &file.Path, &file.Key, &file.IsDir)
 		if err != nil {
 			return types.Error(err.Error())
 		}
-		fmt.Println(file)
 
 		if file.IsDir {
 			continue
@@ -247,7 +256,37 @@ func (a *App) DownloadFile(fileId string) types.Result {
 }
 
 func (a *App) Mkdir(parentDir string, newDir string) types.Result {
-	_, err := db.Exec("insert into file(path, is_dir) values (?, true)", fmt.Sprintf("%s%s", parentDir, newDir))
+	depth := strings.Count(parentDir, "/")
+	_, err := db.Exec("insert into file(path, is_dir, depth) values (?, true, ?)", fmt.Sprintf("%s%s", parentDir, newDir), depth)
+	if err != nil {
+		return types.Error(err.Error())
+	}
+	return types.SuccessEmpty()
+}
+
+func (a *App) GetShareUrl(fileId string, expireInSecond int) types.Result {
+	row := db.QueryRow("select id, path, key, is_dir from file where id = ?", fileId)
+	var file types.File
+	err := row.Scan(&file.ID, &file.Path, &file.Key, &file.IsDir)
+	if err != nil {
+		return types.Error(err.Error())
+	}
+	// TODO 如果是目录怎么办
+
+	config, err := utils.GetConfig()
+	if err != nil {
+		return types.Error(err.Error())
+	}
+	fileName := filepath.Base(file.Path)
+	reqParams := make(url.Values)
+	reqParams.Set("response-content-disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	presignedURL, err := s3Client.PresignedGetObject(context.Background(), config.S3Config.Bucket, file.Key.String, time.Second*time.Duration(expireInSecond), reqParams)
+	if err != nil {
+		return types.Error(err.Error())
+	}
+
+	// 把分享链接放进剪切板里
+	err = runtime.ClipboardSetText(a.ctx, presignedURL.String())
 	if err != nil {
 		return types.Error(err.Error())
 	}
