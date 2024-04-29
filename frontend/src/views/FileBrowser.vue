@@ -41,6 +41,11 @@
     <!--        {{ formatBytes(scope.row.size)}}-->
     <!--      </template>-->
     <!--    </el-table-column>-->
+    <el-table-column label="创建时间">
+      <template #default="scope">
+        {{ dayjs(scope.row.createTime).format('YYYY-MM-DD HH:mm:ss')}}
+      </template>
+    </el-table-column>
     <el-table-column label="操作">
       <template #default="scope">
         <el-button type="primary" @click="download(scope.row.id)">
@@ -49,8 +54,10 @@
           </el-icon>
         </el-button>
 
-        <el-button type="primary" @click="share(scope.row.id)">
-          <el-icon><Share /></el-icon>
+        <el-button type="primary" @click="fileIdToShare = scope.row.id; isShareDialogShow = true">
+          <el-icon>
+            <Share/>
+          </el-icon>
         </el-button>
       </template>
     </el-table-column>
@@ -73,12 +80,30 @@
       </el-button>
     </template>
   </el-dialog>
+
+  <el-dialog v-model="isShareDialogShow">
+    <template #header>
+      分享
+    </template>
+
+    <el-form-item label="有效期">
+      <el-radio-group v-model="expireInSecond">
+        <el-radio :value="60 * 60 * 24" label="1 天"/>
+        <el-radio :value="60 * 60 * 24 * 3" label="3 天"/>
+        <el-radio :value="60 * 60 * 24 * 7" label="7 天"/>
+      </el-radio-group>
+    </el-form-item>
+    <template #footer>
+      <el-button type="primary" @click="share">创建分享链接</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script lang="ts" setup>
 import {onMounted, ref} from "vue";
 import {DownloadFile, GetFileList, GetShareUrl, Mkdir, UploadFiles} from "../../wailsjs/go/main/App";
 import {ElMessage} from "element-plus";
+import dayjs from "dayjs";
 
 const fileList = ref([])
 const isLoading = ref(false)
@@ -165,13 +190,18 @@ async function uploadDir() {
   // TODO 上传目录
 }
 
-async function share(fileId: number) {
-  const result = await GetShareUrl(String(fileId), 60 * 60 * 24 * 7)
+const isShareDialogShow = ref(false)
+const expireInSecond = ref(60 * 60 * 24 * 7)
+const fileIdToShare = ref(0)
+
+async function share() {
+  const result = await GetShareUrl(String(fileIdToShare.value), expireInSecond.value)
   if (result.code != 2000) {
     ElMessage.error(result.msg)
     return
   }
   ElMessage.success('分享链接已复制')
+  isShareDialogShow.value = false
 }
 </script>
 
