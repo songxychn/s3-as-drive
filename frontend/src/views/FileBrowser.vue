@@ -189,7 +189,7 @@ async function uploadFiles() {
 onMounted(loadFileList)
 
 async function download(id: number) {
-  let result = await DownloadFile(id.toString());
+  let result = await DownloadFile(id);
   if (result.code != 2000) {
     ElMessage.error(result.msg)
     return
@@ -242,7 +242,7 @@ const expireInSecond = ref(60 * 60 * 24 * 7)
 const fileIdToShare = ref(0)
 
 async function share() {
-  const result = await GetShareUrl(String(fileIdToShare.value), expireInSecond.value)
+  const result = await GetShareUrl(fileIdToShare.value, expireInSecond.value)
   if (result.code != 2000) {
     ElMessage.error(result.msg)
     return
@@ -255,7 +255,7 @@ const isDeleteDialogShow = ref(false)
 const fileToDelete: any = ref({})
 
 async function deleteFile() {
-  const result = await DeleteFile(String(fileToDelete.value.id))
+  const result = await DeleteFile(fileToDelete.value.id)
   if (result.code != 2000) {
     ElMessage.error(result.msg)
     return

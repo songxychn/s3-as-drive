@@ -1,15 +1,14 @@
 package types
 
-import (
-	"time"
-)
+import "time"
 
 type File struct {
-	ID         string    `json:"id"`
-	Path       string    `json:"path"`
-	Key        *string   `json:"key"`
-	CreateTime time.Time `json:"createTime"`
-	IsDir      bool      `json:"isDir"`
-	Depth      int       `json:"depth"`
-	Size       *int64    `json:"size"`
+	ID        uint      `json:"id"`
+	Path      string    `json:"path"`
+	Key       *string   `json:"key"`
+	IsDir     bool      `json:"isDir"`
+	Depth     uint      `json:"depth"`
+	Size      *uint64   `json:"size"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
