@@ -359,7 +359,7 @@ func (a *App) DeleteFile(fileId uint) types.Result {
 		for _, fileItem := range files {
 			if !fileItem.IsDir {
 				objectsCh <- minio.ObjectInfo{
-					Key: *file.Key,
+					Key: *fileItem.Key,
 				}
 			}
 		}
