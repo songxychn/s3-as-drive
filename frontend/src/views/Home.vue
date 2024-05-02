@@ -12,6 +12,9 @@
           <el-menu-item index="/home/config">
             设置
           </el-menu-item>
+          <el-menu-item index="/home/about">
+            关于
+          </el-menu-item>
         </el-menu>
       </el-aside>
       <el-main>
