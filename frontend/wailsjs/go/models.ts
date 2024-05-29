@@ -75,6 +75,10 @@ export namespace types {
 	    // Go type: time
 	    updatedAt: any;
 	
+	    static createFrom(source: any = {}) {
+	        return new File(source);
+	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -85,10 +89,6 @@ export namespace types {
 	        this.size = source["size"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
-	    }
-	
-	    static createFrom(source: any = {}) {
-	        return new File(source);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

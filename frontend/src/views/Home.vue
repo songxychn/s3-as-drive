@@ -15,6 +15,9 @@
           <el-menu-item index="/home/about">
             关于
           </el-menu-item>
+          <el-menu-item index="/home/sync-dir">
+            同步目录
+          </el-menu-item>
         </el-menu>
       </el-aside>
       <el-main>

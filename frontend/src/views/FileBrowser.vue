@@ -137,7 +137,7 @@ import {
   Mkdir,
   UploadDir,
   UploadFiles
-} from "../../wailsjs/go/main/App";
+} from "../../wailsjs/go/service/FileService";
 import {ElMessage} from "element-plus";
 import dayjs from "dayjs";
 import {types} from "../../wailsjs/go/models";

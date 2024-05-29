@@ -36,7 +36,7 @@
 <script lang="ts" setup>
 import {onMounted, reactive} from "vue";
 import {ElMessage} from "element-plus";
-import {GetConfig, UpdateConfig} from "../../wailsjs/go/main/App";
+import {GetConfig, UpdateConfig} from "../../wailsjs/go/service/ConfigService";
 import {types} from "../../wailsjs/go/models";
 import Config = types.Config;
 

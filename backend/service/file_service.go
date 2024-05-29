@@ -1,159 +1,51 @@
-package main
+package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 	"io/fs"
 	"log"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
-	"s3-as-drive/types"
-	"s3-as-drive/utils"
+	"s3-as-drive/backend/types"
+	"s3-as-drive/backend/utils"
 	"strings"
 	"time"
 )
 
-// App struct
-type App struct {
+type FileService struct {
 	ctx context.Context
 }
 
-var db *gorm.DB = nil
-var s3Client *minio.Client = nil
-
-// NewApp creates a new App application struct
-func NewApp() *App {
-	initConfig()
-
-	initDB()
-
-	initS3Client()
-
-	return &App{}
+func NewFileService() *FileService {
+	return &FileService{}
 }
 
-// 初始化数据库
-func initDB() {
-	baseDir, err := utils.GetBaseDir()
-	if err != nil {
-		panic(err)
-	}
-	dbFilePath := filepath.Join(baseDir, "data.db")
-	db, err = gorm.Open(sqlite.Open(dbFilePath), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
-	err = db.AutoMigrate(&types.File{})
-	if err != nil {
-		panic(err)
-	}
+func (fileService *FileService) Startup(ctx context.Context) {
+	fileService.ctx = ctx
 }
 
-// 初始化 s3 客户端
-func initS3Client() {
-	config, err := utils.GetConfig()
-	if err != nil {
-		panic(err)
-	}
-	s3Client, err = minio.New(config.S3Config.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(config.S3Config.AccessKey, config.S3Config.SecretKey, ""),
-		Secure: true,
-	})
-	if err != nil {
-		panic(err)
-	}
-}
-
-func initConfig() {
-	// 创建 app 根目录
-	currentUser, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	homeDir := currentUser.HomeDir
-	baseDirPath := filepath.Join(homeDir, ".s3-as-drive")
-	err = os.MkdirAll(baseDirPath, 0755)
-	if err != nil {
-		panic(err)
-	}
-
-	configFilePath := filepath.Join(baseDirPath, "config.json")
-	_, err = os.Stat(configFilePath)
-	if os.IsNotExist(err) {
-		// 配置文件不存在, 需要创建
-		config := types.Config{
-			S3Config: types.S3Config{
-				Endpoint:  "play.min.io",
-				AccessKey: "Q3AM3UQ867SPQQA43P2F",
-				SecretKey: "zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG",
-			},
-			DownloadConfig: types.DownloadConfig{
-				Dir: filepath.Join(homeDir, "Downloads"),
-			},
-		}
-		bytes, err := json.Marshal(config)
-		if err != nil {
-			panic(err)
-		}
-		err = os.WriteFile(configFilePath, bytes, 0644)
-		if err != nil {
-			return
-		}
-	}
-}
-
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-}
-
-func (a *App) GetConfig() (types.Config, error) {
-	config, err := utils.GetConfig()
-	if err != nil {
-		return types.Config{}, err
-	}
-	return config, nil
-}
-
-func (a *App) UpdateConfig(config types.Config) error {
-	bytes, err := json.Marshal(config)
-	if err != nil {
-		log.Println(err.Error())
-		return err
-	}
-	baseDir, err := utils.GetBaseDir()
-	if err != nil {
-		return err
-	}
-	configFilePath := filepath.Join(baseDir, "config.json")
-	err = os.WriteFile(configFilePath, bytes, 0644)
-	return nil
-}
-
-func (a *App) GetFileList(currentDir string) []types.File {
+func (fileService *FileService) GetFileList(currentDir string) []types.File {
 	depth := strings.Count(currentDir, "/")
 	var files []types.File
+	db := utils.GetDB()
 	db.Where("path like concat(?, '%') and depth = ?", currentDir, depth).Find(&files)
 	return files
 }
 
-func (a *App) UploadFiles(currentDir string) (int, error) {
+func (fileService *FileService) UploadFiles(currentDir string) (int, error) {
+	db := utils.GetDB()
+	s3Client := utils.GetS3Client()
 	config, err := utils.GetConfig()
 	if err != nil {
 		return 0, err
 	}
 
-	files, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{})
+	files, err := runtime.OpenMultipleFilesDialog(fileService.ctx, runtime.OpenDialogOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -190,13 +82,15 @@ func (a *App) UploadFiles(currentDir string) (int, error) {
 	return len(files), nil
 }
 
-func (a *App) UploadDir(currentDir string) (string, error) {
+func (fileService *FileService) UploadDir(currentDir string) (string, error) {
+	db := utils.GetDB()
+	s3Client := utils.GetS3Client()
 	config, err := utils.GetConfig()
 	if err != nil {
 		log.Fatalln(err)
 		return "", err
 	}
-	dirPath, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{})
+	dirPath, err := runtime.OpenDirectoryDialog(fileService.ctx, runtime.OpenDialogOptions{})
 	if err != nil {
 		log.Fatalln(err)
 		return "", err
@@ -254,7 +148,9 @@ func (a *App) UploadDir(currentDir string) (string, error) {
 	return dirPath, nil
 }
 
-func (a *App) DownloadFile(fileId uint) error {
+func (fileService *FileService) DownloadFile(fileId uint) error {
+	db := utils.GetDB()
+	s3Client := utils.GetS3Client()
 	config, err := utils.GetConfig()
 	if err != nil {
 		return err
@@ -288,7 +184,8 @@ func (a *App) DownloadFile(fileId uint) error {
 	return nil
 }
 
-func (a *App) Mkdir(parentDir string, newDir string) error {
+func (fileService *FileService) Mkdir(parentDir string, newDir string) error {
+	db := utils.GetDB()
 	depth := strings.Count(parentDir, "/")
 	db.Create(&types.File{
 		Path:  fmt.Sprintf("%s%s", parentDir, newDir),
@@ -299,7 +196,9 @@ func (a *App) Mkdir(parentDir string, newDir string) error {
 }
 
 // TODO 如果是目录怎么办
-func (a *App) GetShareUrl(fileId uint, expireInSecond int) error {
+func (fileService *FileService) GetShareUrl(fileId uint, expireInSecond int) error {
+	db := utils.GetDB()
+	s3Client := utils.GetS3Client()
 	var file types.File
 	db.First(&file, fileId)
 	config, err := utils.GetConfig()
@@ -315,14 +214,16 @@ func (a *App) GetShareUrl(fileId uint, expireInSecond int) error {
 	}
 
 	// 把分享链接放进剪切板里
-	err = runtime.ClipboardSetText(a.ctx, presignedURL.String())
+	err = runtime.ClipboardSetText(fileService.ctx, presignedURL.String())
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *App) DeleteFile(fileId uint) error {
+func (fileService *FileService) DeleteFile(fileId uint) error {
+	db := utils.GetDB()
+	s3Client := utils.GetS3Client()
 	config, err := utils.GetConfig()
 	if err != nil {
 		log.Fatalln(err)

@@ -3,6 +3,7 @@ import Home from "@/views/Home.vue";
 import FileBrowser from "@/views/FileBrowser.vue";
 import Config from '@/views/Config.vue';
 import About from "../views/About.vue";
+import SyncDir from "../views/SyncDir.vue";
 
 const routes: Array<RouteRecordRaw> = [
     {
@@ -25,6 +26,10 @@ const routes: Array<RouteRecordRaw> = [
             {
                 path: '/home/about',
                 component: About,
+            },
+            {
+                path: '/home/sync-dir',
+                component: SyncDir,
             },
         ]
     },
