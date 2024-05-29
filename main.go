@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"embed"
-	"s3-as-drive/backend/service"
+	"s3-as-drive/backend/services"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -14,8 +14,9 @@ import (
 var assets embed.FS
 
 func main() {
-	configService := service.NewConfigService()
-	fileService := service.NewFileService()
+	configService := services.NewConfigService()
+	fileService := services.NewFileService()
+	syncDirService := services.NewSyncDirService()
 
 	err := wails.Run(&options.App{
 		Title:  "s3-as-drive",
@@ -28,10 +29,12 @@ func main() {
 		OnStartup: func(ctx context.Context) {
 			configService.Startup(ctx)
 			fileService.Startup(ctx)
+			syncDirService.Startup(ctx)
 		},
 		Bind: []interface{}{
 			configService,
 			fileService,
+			syncDirService,
 		},
 	})
 
