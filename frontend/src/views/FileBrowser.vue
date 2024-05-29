@@ -54,7 +54,8 @@
           </el-icon>
         </el-button>
 
-        <el-button :disabled="scope.row.isDir" type="primary" @click="fileIdToShare = scope.row.id; isShareDialogShow = true">
+        <el-button :disabled="scope.row.isDir" type="primary"
+                   @click="fileIdToShare = scope.row.id; isShareDialogShow = true">
           <el-icon>
             <Share/>
           </el-icon>
@@ -127,7 +128,7 @@
 </template>
 
 <script lang="ts" setup>
-import {onMounted, ref} from "vue";
+import {onMounted, reactive, ref} from "vue";
 import {
   DeleteFile,
   DownloadFile,
@@ -139,8 +140,9 @@ import {
 } from "../../wailsjs/go/main/App";
 import {ElMessage} from "element-plus";
 import dayjs from "dayjs";
+import {types} from "../../wailsjs/go/models";
 
-const fileList = ref([])
+const fileList: types.File[] = reactive([])
 const isLoading = ref(false)
 const currentDir = ref('/')
 
@@ -163,53 +165,58 @@ function formatBytes(bytes: number): string {
 
 async function loadFileList() {
   isLoading.value = true
-  const result = await GetFileList(currentDir.value)
-  isLoading.value = false
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
-    return
+  try {
+    const result = await GetFileList(currentDir.value)
+    fileList.splice(0, fileList.length)
+    result.forEach((item) => {
+      fileList.push(item)
+    })
+    isLoading.value = false
+  } catch (e: any) {
+    ElMessage.error(e)
   }
-  fileList.value = result.data
 }
 
 onMounted(loadFileList)
 
 // TODO 进度展示
 async function uploadFiles() {
-  const result = await UploadFiles(currentDir.value)
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
+  try {
+    const result = await UploadFiles(currentDir.value)
+    if (result > 0) {
+      ElMessage.success(`成功上传${result}个文件`)
+    }
+    await loadFileList()
+  } catch (e: any) {
+    ElMessage.error(e)
   }
-  if (result.data > 0) {
-    ElMessage.success(`成功上传${result.data}个文件`)
-  }
-  await loadFileList()
 }
 
 onMounted(loadFileList)
 
 async function download(id: number) {
-  let result = await DownloadFile(id);
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
-    return
+  try {
+    await DownloadFile(id);
+    ElMessage.success('下载成功')
+  } catch (e: any) {
+    ElMessage.error(e)
   }
-  ElMessage.success('下载成功')
 }
+
 
 const isMkdirDialogShow = ref(false)
 const newDir = ref('')
 
 async function mkdir() {
-  const result = await Mkdir(currentDir.value, newDir.value)
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
-    return
+  try {
+    await Mkdir(currentDir.value, newDir.value);
+    ElMessage.success('创建成功')
+    isMkdirDialogShow.value = false
+    newDir.value = ''
+    await loadFileList()
+  } catch (e: any) {
+    ElMessage.error(e)
   }
-  ElMessage.success('创建成功')
-  isMkdirDialogShow.value = false
-  newDir.value = ''
-  await loadFileList()
 }
 
 const openDir = async (row: any, column: any, event: Event): Promise<void> => {
@@ -226,14 +233,12 @@ async function back() {
 }
 
 async function uploadDir() {
-  const result = await UploadDir(currentDir.value)
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
-    return
-  }
-  if (result.data !== '') {
+  try {
+    await UploadDir(currentDir.value)
     ElMessage.success('上传成功')
     await loadFileList()
+  } catch (e: any) {
+    ElMessage.error(e)
   }
 }
 
@@ -242,27 +247,27 @@ const expireInSecond = ref(60 * 60 * 24 * 7)
 const fileIdToShare = ref(0)
 
 async function share() {
-  const result = await GetShareUrl(fileIdToShare.value, expireInSecond.value)
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
-    return
+  try {
+    const result = await GetShareUrl(fileIdToShare.value, expireInSecond.value)
+    ElMessage.success('分享链接已复制')
+    isShareDialogShow.value = false
+  } catch (e: any) {
+    ElMessage.error(e)
   }
-  ElMessage.success('分享链接已复制')
-  isShareDialogShow.value = false
 }
 
 const isDeleteDialogShow = ref(false)
 const fileToDelete: any = ref({})
 
 async function deleteFile() {
-  const result = await DeleteFile(fileToDelete.value.id)
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
-    return
+  try {
+    await DeleteFile(fileToDelete.value.id)
+    ElMessage.success('删除成功')
+    isDeleteDialogShow.value = false
+    await loadFileList()
+  } catch (e: any) {
+    ElMessage.error(e)
   }
-  ElMessage.success('删除成功')
-  isDeleteDialogShow.value = false
-  await loadFileList()
 }
 
 function getBaseName(path: string): string {

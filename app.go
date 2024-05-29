@@ -117,45 +117,45 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-func (a *App) GetConfig() types.Result {
+func (a *App) GetConfig() (types.Config, error) {
 	config, err := utils.GetConfig()
 	if err != nil {
-		return types.Error(err.Error())
+		return types.Config{}, err
 	}
-	return types.Success(config)
+	return config, nil
 }
 
-func (a *App) UpdateConfig(config types.Config) types.Result {
+func (a *App) UpdateConfig(config types.Config) error {
 	bytes, err := json.Marshal(config)
 	if err != nil {
 		log.Println(err.Error())
-		return types.Error(err.Error())
+		return err
 	}
 	baseDir, err := utils.GetBaseDir()
 	if err != nil {
-		return types.Error(err.Error())
+		return err
 	}
 	configFilePath := filepath.Join(baseDir, "config.json")
 	err = os.WriteFile(configFilePath, bytes, 0644)
-	return types.SuccessEmpty()
+	return nil
 }
 
-func (a *App) GetFileList(currentDir string) types.Result {
+func (a *App) GetFileList(currentDir string) []types.File {
 	depth := strings.Count(currentDir, "/")
 	var files []types.File
 	db.Where("path like concat(?, '%') and depth = ?", currentDir, depth).Find(&files)
-	return types.Success(files)
+	return files
 }
 
-func (a *App) UploadFiles(currentDir string) types.Result {
+func (a *App) UploadFiles(currentDir string) (int, error) {
 	config, err := utils.GetConfig()
 	if err != nil {
-		return types.Error(err.Error())
+		return 0, err
 	}
 
 	files, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{})
 	if err != nil {
-		return types.Error(err.Error())
+		return 0, err
 	}
 
 	depth := strings.Count(currentDir, "/")
@@ -164,19 +164,19 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 		// 上传 s3
 		newUUID, err := uuid.NewUUID()
 		if err != nil {
-			return types.Error(err.Error())
+			return 0, err
 		}
 		key := fmt.Sprintf("%s%s", newUUID, filepath.Ext(filePath))
 		_, err = s3Client.FPutObject(context.Background(), config.S3Config.Bucket, key, filePath, minio.PutObjectOptions{})
 		if err != nil {
-			return types.Error(err.Error())
+			return 0, err
 		}
 
 		// 插入数据库
 		path := filepath.Join(currentDir, filepath.Base(filePath))
 		fileInfo, err := os.Stat(filePath)
 		if err != nil {
-			return types.Error(err.Error())
+			return 0, err
 		}
 		size := uint64(fileInfo.Size())
 		db.Create(&types.File{
@@ -187,23 +187,23 @@ func (a *App) UploadFiles(currentDir string) types.Result {
 			Size:  &size,
 		})
 	}
-	return types.Success(len(files))
+	return len(files), nil
 }
 
-func (a *App) UploadDir(currentDir string) types.Result {
+func (a *App) UploadDir(currentDir string) (string, error) {
 	config, err := utils.GetConfig()
 	if err != nil {
 		log.Fatalln(err)
-		return types.ErrorEmpty()
+		return "", err
 	}
 	dirPath, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{})
 	if err != nil {
 		log.Fatalln(err)
-		return types.ErrorEmpty()
+		return "", err
 	}
 	if dirPath == "" {
 		// 用户取消了
-		return types.Success("")
+		return "", nil
 	}
 
 	base := filepath.Base(dirPath)
@@ -249,15 +249,15 @@ func (a *App) UploadDir(currentDir string) types.Result {
 	})
 	if err != nil {
 		log.Fatalln(err)
-		return types.ErrorEmpty()
+		return "", err
 	}
-	return types.Success(dirPath)
+	return dirPath, nil
 }
 
-func (a *App) DownloadFile(fileId uint) types.Result {
+func (a *App) DownloadFile(fileId uint) error {
 	config, err := utils.GetConfig()
 	if err != nil {
-		return types.Error(err.Error())
+		return err
 	}
 	var file types.File
 	db.First(&file, fileId)
@@ -267,9 +267,9 @@ func (a *App) DownloadFile(fileId uint) types.Result {
 		downloadPath := filepath.Join(config.DownloadConfig.Dir, filepath.Base(file.Path))
 		err = s3Client.FGetObject(context.Background(), config.S3Config.Bucket, *file.Key, downloadPath, minio.GetObjectOptions{})
 		if err != nil {
-			return types.Error(err.Error())
+			return err
 		}
-		return types.SuccessEmpty()
+		return nil
 	}
 
 	// 是目录
@@ -282,51 +282,51 @@ func (a *App) DownloadFile(fileId uint) types.Result {
 		downloadPath := filepath.Join(config.DownloadConfig.Dir, fileItem.Path)
 		err := s3Client.FGetObject(context.Background(), config.S3Config.Bucket, *fileItem.Key, downloadPath, minio.GetObjectOptions{})
 		if err != nil {
-			return types.Error(err.Error())
+			return err
 		}
 	}
-	return types.SuccessEmpty()
+	return nil
 }
 
-func (a *App) Mkdir(parentDir string, newDir string) types.Result {
+func (a *App) Mkdir(parentDir string, newDir string) error {
 	depth := strings.Count(parentDir, "/")
 	db.Create(&types.File{
 		Path:  fmt.Sprintf("%s%s", parentDir, newDir),
 		IsDir: true,
 		Depth: uint(depth),
 	})
-	return types.SuccessEmpty()
+	return nil
 }
 
 // TODO 如果是目录怎么办
-func (a *App) GetShareUrl(fileId uint, expireInSecond int) types.Result {
+func (a *App) GetShareUrl(fileId uint, expireInSecond int) error {
 	var file types.File
 	db.First(&file, fileId)
 	config, err := utils.GetConfig()
 	if err != nil {
-		return types.Error(err.Error())
+		return err
 	}
 	fileName := filepath.Base(file.Path)
 	reqParams := make(url.Values)
 	reqParams.Set("response-content-disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
 	presignedURL, err := s3Client.PresignedGetObject(context.Background(), config.S3Config.Bucket, *file.Key, time.Second*time.Duration(expireInSecond), reqParams)
 	if err != nil {
-		return types.Error(err.Error())
+		return err
 	}
 
 	// 把分享链接放进剪切板里
 	err = runtime.ClipboardSetText(a.ctx, presignedURL.String())
 	if err != nil {
-		return types.Error(err.Error())
+		return err
 	}
-	return types.SuccessEmpty()
+	return nil
 }
 
-func (a *App) DeleteFile(fileId uint) types.Result {
+func (a *App) DeleteFile(fileId uint) error {
 	config, err := utils.GetConfig()
 	if err != nil {
 		log.Fatalln(err)
-		return types.ErrorEmpty()
+		return err
 	}
 
 	var file types.File
@@ -339,10 +339,10 @@ func (a *App) DeleteFile(fileId uint) types.Result {
 		err = s3Client.RemoveObject(context.Background(), config.S3Config.Bucket, *file.Key, minio.RemoveObjectOptions{})
 		if err != nil {
 			log.Fatalln(err)
-			return types.ErrorEmpty()
+			return err
 		}
 
-		return types.SuccessEmpty()
+		return nil
 	}
 
 	// 目录
@@ -368,5 +368,5 @@ func (a *App) DeleteFile(fileId uint) types.Result {
 	for deleteErr := range s3Client.RemoveObjects(context.Background(), config.S3Config.Bucket, objectsCh, minio.RemoveObjectsOptions{}) {
 		log.Println(deleteErr)
 	}
-	return types.SuccessEmpty()
+	return nil
 }

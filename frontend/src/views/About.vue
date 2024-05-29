@@ -14,7 +14,6 @@
 </template>
 
 <script lang="ts" setup>
-
 import {BrowserOpenURL} from "../../wailsjs/runtime";
 </script>
 

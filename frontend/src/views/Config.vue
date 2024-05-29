@@ -34,43 +34,34 @@
 </template>
 
 <script lang="ts" setup>
-import {onMounted, ref} from "vue";
+import {onMounted, reactive} from "vue";
 import {ElMessage} from "element-plus";
 import {GetConfig, UpdateConfig} from "../../wailsjs/go/main/App";
 import {types} from "../../wailsjs/go/models";
 import Config = types.Config;
-import S3Config = types.S3Config;
-import DownloadConfig = types.DownloadConfig;
 
-const config: any = ref(new Config({
-  s3Config: new S3Config({
-    endpoint: '',
-    accessKey: '',
-    secretKey: '',
-    bucket: '',
-  }),
-  downloadConfig: new DownloadConfig({
-    dir: ''
-  })
+const config: Config = reactive(new Config({
+  s3Config: {},
+  downloadConfig: {}
 }))
 
 async function loadConfig() {
-  const result = await GetConfig();
-  if (result.code != 2000) {
-    ElMessage.error(result.msg)
-    return
+  try {
+    const result = await GetConfig();
+    Object.assign(config, result)
+  } catch (e: any) {
+    ElMessage.error(e)
   }
-  config.value = result.data
 }
 
 onMounted(loadConfig)
 
 async function updateConfig() {
-  const resp = await UpdateConfig(config.value);
-  if (resp.code == 2000) {
+  try {
+    await UpdateConfig(config);
     ElMessage.success('保存成功')
-  } else {
-    ElMessage.error(resp.msg)
+  } catch (e: any) {
+    ElMessage.error(e)
   }
 }
 </script>
